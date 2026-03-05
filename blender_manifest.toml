@@ -1,0 +1,27 @@
+schema_version = "1.0.0"
+
+id = "noppers_modular_avatar_export"
+version = "1.0.0"
+name = "Modular Avatar Export"
+tagline = "Clean export of modular avatar parts"
+maintainer = "NOPPERS <noppersvrc@proton.me>"
+
+type = "add-on"
+
+blender_version_min = "4.5.0"
+
+license = [
+  "SPDX:GPL-3.0-or-later",
+]
+
+tags = ["Rigging", "Mesh", "Import-Export"]
+
+description = """
+Automate VRChat avatar modular export workflow. Create export profiles that handle:
+- Clean renaming of objects and data (no .001 conflicts)
+- Bone collection filtering per module
+- Optional mesh joining for tool compatibility
+- Automatic FBX export from temporary scene
+
+Supports modular avatar workflows with VRCFury and Modular Avatar.
+"""
