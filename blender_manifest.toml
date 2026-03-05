@@ -4,7 +4,7 @@ id = "noppers_modular_avatar_export"
 version = "1.0.0"
 name = "Modular Avatar Export"
 tagline = "Clean export of modular avatar parts"
-maintainer = "NOPPERS <noppersvrc@proton.me>"
+maintainer = "NOPPERS"
 
 type = "add-on"
 

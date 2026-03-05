@@ -20,15 +20,15 @@ class NOPPERS_PT_ModularAvatarExport(Panel):
         scene = context.scene
 
         # Staging mode — show return button and nothing else
-        if scene.source_scene_name:
+        if scene.noppers_ma_source_scene_name != "":
             self._draw_clean_room(layout, scene)
             return
 
-        is_new = scene.export_active_template == "NEW"
+        is_new = scene.noppers_ma_export_active_template == "NEW"
 
         # ── Template Selector ─────────────────────────────────
         row = layout.row(align=True)
-        row.prop(scene, "export_active_template", text="")
+        row.prop(scene, "noppers_ma_export_active_template", text="")
         if is_new:
             has_selection = any(
                 obj.type in {"MESH", "ARMATURE"} for obj in context.selected_objects
@@ -37,7 +37,10 @@ class NOPPERS_PT_ModularAvatarExport(Panel):
             save_sub.enabled = has_selection
             save_sub.operator("noppers.save_template", text="", icon="ADD")
             layout.prop(
-                scene, "export_template_name", text="", placeholder="Template name..."
+                scene,
+                "noppers_ma_export_template_name",
+                text="",
+                placeholder="Template name...",
             )
         else:
             row.operator("noppers.save_template", text="", icon="ADD")
@@ -53,13 +56,15 @@ class NOPPERS_PT_ModularAvatarExport(Panel):
     def _draw_clean_room(self, layout, scene):
         """Shown when the current Blender scene is in staging."""
         col = layout.column(align=True)
-        col.label(text=f"Source:  {scene.source_scene_name}", icon="SCENE_DATA")
+        col.label(
+            text=f"Source:  {scene.noppers_ma_source_scene_name}", icon="SCENE_DATA"
+        )
         layout.separator()
         row = layout.row()
         row.scale_y = 1.6
         row.operator(
             "noppers.return_to_scene",
-            text=f"Return to  {scene.source_scene_name}",
+            text=f"Return to  {scene.noppers_ma_source_scene_name}",
             icon="LOOP_BACK",
         )
 
@@ -77,7 +82,7 @@ class NOPPERS_PT_ModularAvatarExport(Panel):
         if selected_meshes:
             target_counts = {}
             for obj in selected_meshes:
-                t = obj.export_target_name.strip() or obj.name
+                t = obj.noppers_ma_export_target_name.strip() or obj.name
                 target_counts[t] = target_counts.get(t, 0) + 1
 
             for obj in selected_meshes:
@@ -86,10 +91,13 @@ class NOPPERS_PT_ModularAvatarExport(Panel):
                 row = col.row()
                 row.enabled = False
                 row.label(text=obj.name)
-                t = obj.export_target_name.strip() or obj.name
+                t = obj.noppers_ma_export_target_name.strip() or obj.name
                 name_row = col.row(align=True)
                 name_row.prop(
-                    obj, "export_target_name", text="Export As", placeholder=obj.name
+                    obj,
+                    "noppers_ma_export_target_name",
+                    text="Export As",
+                    placeholder=obj.name,
                 )
                 if target_counts.get(t, 0) > 1:
                     name_row.label(text="", icon="LINKED")
@@ -105,12 +113,17 @@ class NOPPERS_PT_ModularAvatarExport(Panel):
             row = col.row()
             row.enabled = False
             row.label(text=obj.name)
-            col.prop(obj, "export_target_name", text="Export As", placeholder=obj.name)
+            col.prop(
+                obj,
+                "noppers_ma_export_target_name",
+                text="Export As",
+                placeholder=obj.name,
+            )
 
             layout.separator()
             layout.label(text="Bone Collections:", icon="GROUP_BONE")
-            if obj.bone_collection_items:
-                for item in obj.bone_collection_items:
+            if obj.noppers_ma_bone_collection_items:
+                for item in obj.noppers_ma_bone_collection_items:
                     layout.prop(item, "enabled", text=item.name)
             else:
                 layout.label(text="No bone collections found", icon="INFO")
@@ -119,10 +132,10 @@ class NOPPERS_PT_ModularAvatarExport(Panel):
 
     def _draw_saved_template(self, layout, context, scene):
         """Template-data-driven UI — persistent regardless of selection."""
-        idx = int(scene.export_active_template)
-        if idx >= len(scene.export_templates):
+        idx = int(scene.noppers_ma_export_active_template)
+        if idx >= len(scene.noppers_ma_export_templates):
             return
-        template = scene.export_templates[idx]
+        template = scene.noppers_ma_export_templates[idx]
         mappings = [
             pair.split(":", 1) for pair in template.data.split(";") if ":" in pair
         ]
@@ -144,7 +157,7 @@ class NOPPERS_PT_ModularAvatarExport(Panel):
         for obj_name, _ in meshes:
             obj = scene.objects.get(obj_name)
             if obj:
-                t = obj.export_target_name.strip() or obj.name
+                t = obj.noppers_ma_export_target_name.strip() or obj.name
                 target_counts[t] = target_counts.get(t, 0) + 1
 
         for obj_name, _ in meshes:
@@ -162,10 +175,13 @@ class NOPPERS_PT_ModularAvatarExport(Panel):
                 name_row.label(text=obj_name)
             # Export name field (editable if object exists)
             if obj:
-                t = obj.export_target_name.strip() or obj.name
+                t = obj.noppers_ma_export_target_name.strip() or obj.name
                 name_row2 = col.row(align=True)
                 name_row2.prop(
-                    obj, "export_target_name", text="Export As", placeholder=obj.name
+                    obj,
+                    "noppers_ma_export_target_name",
+                    text="Export As",
+                    placeholder=obj.name,
                 )
                 if target_counts.get(t, 0) > 1:
                     name_row2.label(text="", icon="LINKED")
@@ -187,13 +203,16 @@ class NOPPERS_PT_ModularAvatarExport(Panel):
                     status_row.label(text="", icon="HIDE_ON")
                 status_row.label(text=obj_name)
                 col.prop(
-                    obj, "export_target_name", text="Export As", placeholder=obj.name
+                    obj,
+                    "noppers_ma_export_target_name",
+                    text="Export As",
+                    placeholder=obj.name,
                 )
 
                 layout.separator()
                 layout.label(text="Bone Collections:", icon="GROUP_BONE")
-                if obj.bone_collection_items:
-                    for item in obj.bone_collection_items:
+                if obj.noppers_ma_bone_collection_items:
+                    for item in obj.noppers_ma_bone_collection_items:
                         layout.prop(item, "enabled", text=item.name)
                 else:
                     layout.label(text="No bone collections found", icon="INFO")
