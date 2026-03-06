@@ -53,7 +53,28 @@ class NOPPERS_OT_SaveTemplate(Operator):
                         f"{obj.name}:{obj.noppers_ma_export_target_name or obj.name}"
                     )
 
+        # Append enabled bone collections from the armature as '|ColA,ColB'
+        armature_obj = None
+        if is_new:
+            armature_obj = next(
+                (obj for obj in selected if obj.type == "ARMATURE"), None
+            )
+        else:
+            for obj_name in stored:
+                obj = scene.objects.get(obj_name)
+                if obj and obj.type == "ARMATURE":
+                    armature_obj = obj
+                    break
+
         data = ";".join(pairs)
+        if armature_obj:
+            enabled_cols = [
+                item.name
+                for item in armature_obj.noppers_ma_bone_collection_items
+                if item.enabled
+            ]
+            if enabled_cols:
+                data += "|" + ",".join(enabled_cols)
 
         # Overwrite if name already exists, otherwise add new
         template = next(

@@ -13,51 +13,42 @@ classes = (
     display.NOPPERS_PT_ModularAvatarExport,
     # TODO: Add a way to detect zombie bone(s) without collections
 )
+_register_classes, _unregister_classes = bpy.utils.register_classes_factory(classes)
 
 
-def _sync_bone_collections(scene, depsgraph):
+def _sync_bone_collections(scene, _depsgraph):
     """Sync armature bone collection changes"""
 
     if scene.noppers_ma_source_scene_name != "":
-        return  # Skip if not in source scene
+        return  # staging scene — skip
 
     for obj in scene.objects:
         if obj.type != "ARMATURE":
             continue
 
-        cols = obj.data.collections
+        collections = obj.data.collections
         items = obj.noppers_ma_bone_collection_items
-        if len(cols) == len(items) and all(
-            c.name == i.name for c, i in zip(cols, items)
+        if len(collections) == len(items) and all(
+            c.name == i.name for c, i in zip(collections, items)
         ):
             continue
 
         existing = {item.name: item.enabled for item in items}
         items.clear()
 
-        for col in cols:
+        for bone in collections:
             item = items.add()
-            item.name = col.name
-            item.enabled = existing.get(col.name, True)
+            item.name = bone.name
+            item.enabled = existing.get(bone.name, True)
 
 
 def register():
     data.register()
-
-    for cls in classes:
-        bpy.utils.register_class(cls)
-
+    _register_classes()
     bpy.app.handlers.depsgraph_update_post.append(_sync_bone_collections)
 
 
 def unregister():
     bpy.app.handlers.depsgraph_update_post.remove(_sync_bone_collections)
-
-    for cls in reversed(classes):
-        bpy.utils.unregister_class(cls)
-
+    _unregister_classes()
     data.unregister()
-
-
-if __name__ == "__main__":
-    register()

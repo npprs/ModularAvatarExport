@@ -26,7 +26,7 @@ class NOPPERS_PT_ModularAvatarExport(Panel):
 
         is_new = scene.noppers_ma_export_active_template == "NEW"
 
-        # ── Template Selector ─────────────────────────────────
+        # Template Selector
         row = layout.row(align=True)
         row.prop(scene, "noppers_ma_export_active_template", text="")
         if is_new:

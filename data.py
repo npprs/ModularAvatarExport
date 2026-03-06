@@ -44,8 +44,9 @@ def _on_active_template_changed(self, context):
     template = self.noppers_ma_export_templates[idx]
     if not template.data:
         return
+    mappings_str, _, collections_str = template.data.partition("|")
     mappings = dict(
-        pair.split(":", 1) for pair in template.data.split(";") if ":" in pair
+        pair.split(":", 1) for pair in mappings_str.split(";") if ":" in pair
     )
 
     last_armature = None
@@ -60,6 +61,12 @@ def _on_active_template_changed(self, context):
 
     if last_armature and context.view_layer:
         context.view_layer.objects.active = last_armature
+
+    # Restore enabled bone collections saved in the template
+    if last_armature and collections_str:
+        enabled = set(collections_str.split(","))
+        for item in last_armature.noppers_ma_bone_collection_items:
+            item.enabled = item.name in enabled
 
 
 def register():
