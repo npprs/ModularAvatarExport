@@ -4,6 +4,8 @@ Operators for Modular Avatar Export
 
 import bpy  # type: ignore
 from bpy.types import Operator
+from .data import encode_template_data, parse_template_data
+from collections import defaultdict
 
 
 class NOPPERS_OT_SaveTemplate(Operator):
@@ -16,6 +18,7 @@ class NOPPERS_OT_SaveTemplate(Operator):
     def execute(self, context):
         scene = context.scene
         is_new = scene.noppers_ma_export_active_template == "NEW"
+        selected = []
 
         if is_new:
             # New template: use name field + current selection
@@ -31,61 +34,55 @@ class NOPPERS_OT_SaveTemplate(Operator):
             if not selected:
                 self.report({"WARNING"}, "No meshes or armature selected")
                 return {"CANCELLED"}
-            pairs = [
-                f"{obj.name}:{obj.noppers_ma_export_target_name or obj.name}"
-                for obj in selected
-            ]
+            if sum(1 for obj in selected if obj.type == "ARMATURE") > 1:
+                self.report({"WARNING"}, "Select only one armature")
+                return {"CANCELLED"}
         else:
             # Existing template: re-encode from stored object names using current field values
             idx = int(scene.noppers_ma_export_active_template)
             template = scene.noppers_ma_export_templates[idx]
             name = template.name
-            stored = [
-                pair.split(":", 1)[0]
-                for pair in template.data.split(";")
-                if ":" in pair
+            stored_mappings, _ = parse_template_data(template.data)
+            selected = [
+                obj
+                for obj_name in stored_mappings
+                if (obj := scene.objects.get(obj_name))
             ]
-            pairs = []
-            for obj_name in stored:
-                obj = scene.objects.get(obj_name)
-                if obj:
-                    pairs.append(
-                        f"{obj.name}:{obj.noppers_ma_export_target_name or obj.name}"
-                    )
 
-        # Append enabled bone collections from the armature as '|ColA,ColB'
+        # Build separate mesh and armature mappings in one pass
+        meshes = {}
+        armature = {}
         armature_obj = None
-        if is_new:
-            armature_obj = next(
-                (obj for obj in selected if obj.type == "ARMATURE"), None
-            )
-        else:
-            for obj_name in stored:
-                obj = scene.objects.get(obj_name)
-                if obj and obj.type == "ARMATURE":
-                    armature_obj = obj
-                    break
+        for obj in selected:
+            target = obj.noppers_ma_export_target_name or obj.name
+            if obj.type == "ARMATURE":
+                armature[obj.name] = target
+                armature_obj = obj
+            else:
+                meshes[obj.name] = target
 
-        data = ";".join(pairs)
-        if armature_obj:
-            enabled_cols = [
-                item.name
+        bone_collections = (
+            {
+                item.name: item.enabled
                 for item in armature_obj.noppers_ma_bone_collection_items
-                if item.enabled
-            ]
-            if enabled_cols:
-                data += "|" + ",".join(enabled_cols)
+            }
+            if armature_obj
+            else {}
+        )
+        data_str = encode_template_data(meshes, armature, bone_collections)
 
-        # Overwrite if name already exists, otherwise add new
+        # Update existing template (if exist) or create new template
         template = next(
             (t for t in scene.noppers_ma_export_templates if t.name == name), None
         )
+
         if template is None:
             template = scene.noppers_ma_export_templates.add()
             template.name = name
-        template.data = data
 
-        # Switch dropdown to the saved template
+        template.data = data_str
+
+        # Set dropdown to the newly saved template
         for i, t in enumerate(scene.noppers_ma_export_templates):
             if t.name == name:
                 scene.noppers_ma_export_active_template = str(i)
@@ -102,18 +99,17 @@ class NOPPERS_OT_RemoveTemplate(Operator):
     bl_label = "Remove Template"
     bl_options = {"REGISTER", "UNDO"}
 
+    @classmethod
+    def poll(cls, context):
+        return context.scene.noppers_ma_export_active_template != "NEW"
+
     def execute(self, context):
         scene = context.scene
         templates = scene.noppers_ma_export_templates
-
-        if not templates:
-            return {"CANCELLED"}
-
-        name = templates[int(scene.noppers_ma_export_active_template)].name
         templates.remove(int(scene.noppers_ma_export_active_template))
         scene.noppers_ma_export_active_template = "NEW"
 
-        self.report({"INFO"}, f"Removed template '{name}'")
+        self.report({"INFO"}, "Removed template")
         return {"FINISHED"}
 
 
@@ -124,15 +120,15 @@ class NOPPERS_OT_PrepareExport(Operator):
     bl_label = "Stage Export"
     bl_options = {"REGISTER"}
 
-    def execute(self, context):
-        from collections import defaultdict
+    @classmethod
+    def poll(cls, context):
+        return context.scene.noppers_ma_export_active_template != "NEW"
 
+    def execute(self, context):
         scene = context.scene
         idx = int(scene.noppers_ma_export_active_template)
         template = scene.noppers_ma_export_templates[idx]
-        mappings = [
-            pair.split(":", 1) for pair in template.data.split(";") if ":" in pair
-        ]
+        mappings, col_states = parse_template_data(template.data)
         if not mappings:
             self.report({"WARNING"}, "Template has no objects")
             return {"CANCELLED"}
@@ -150,7 +146,7 @@ class NOPPERS_OT_PrepareExport(Operator):
 
         try:
             copies = []
-            for obj_name, target_name in mappings:
+            for obj_name, target_name in mappings.items():
                 src = scene.objects.get(obj_name)
                 if src is None:
                     self.report({"WARNING"}, f"'{obj_name}' not found, skipping")
@@ -191,10 +187,20 @@ class NOPPERS_OT_PrepareExport(Operator):
                     copy.rename(target_name, mode="ALWAYS")
                     copy.data.rename(target_name, mode="ALWAYS")
                     armature_enabled[copy] = {
-                        item.name
-                        for item in src.noppers_ma_bone_collection_items
-                        if item.enabled
+                        name for name, enabled in col_states.items() if enabled
                     }
+
+            # Fix stale cross-object references on mesh survivors:
+            # src.copy() carries over the source scene's parent and modifier targets.
+            armature_copy = next(iter(armature_enabled), None)
+            if armature_copy:
+                for group in mesh_groups.values():
+                    mesh = group[0]
+                    mesh.parent = armature_copy
+                    mesh.parent_type = "OBJECT"
+                    for mod in mesh.modifiers:
+                        if mod.type == "ARMATURE":
+                            mod.object = armature_copy
 
         except Exception as e:
             self.report({"ERROR"}, f"Failed to build staging scene: {e}")
@@ -230,10 +236,15 @@ class NOPPERS_OT_ReturnToScene(Operator):
     bl_label = "Return to Scene"
     bl_options = {"REGISTER"}
 
+    @classmethod
+    def poll(cls, context):
+        return context.scene.noppers_ma_source_scene_name != ""
+
     def execute(self, context):
         staging_scene = context.scene
         source_name = staging_scene.noppers_ma_source_scene_name
         source_scene = bpy.data.scenes.get(source_name)
+
         if source_scene is None:
             self.report({"WARNING"}, f"Original scene '{source_name}' not found")
             return {"CANCELLED"}

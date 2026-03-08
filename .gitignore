@@ -1,1 +1,6 @@
 *.zip
+
+
+# Test artifacts
+__pycache__/
+*.pyc

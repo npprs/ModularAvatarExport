@@ -1,68 +1,67 @@
-# Modular Export
+# Modular Avatar Export
 
-Automate VRChat avatar modular export workflow with clean renaming and bone collection filtering.
+Blender addon for VRChat avatar modular export. Define per-module templates (which objects to export, export names, which bone collections to include), then stage and export with one click.
 
-## Goal
+Solves Blender's naming conflict problem by duplicating objects into a temporary clean-room scene for renaming and export.
 
-Simplify exporting different avatar modules (body, head, outfit, props) from a single mega-armature project.
+## Requirements
 
-## Problem
+- Blender 4.5.7
 
-VRChat avatar development uses modular rigs maintained with tools like VRCFury and Modular Avatar. Blender makes exporting individual parts painful:
+## Usage
 
-1. **Naming Conflicts**: Duplicating `Armature_WIP` creates `Armature.001`, `.002`, etc. (Blender enforces unique names)
-2. **Manual Renaming**: Must rename object AND data names, one at a time
-3. **Bone Cleanup**: Manually delete unused bone collections before export
-4. **Repetitive**: Do this for every module (body, head, outfit1, outfit2, etc.)
-5. **Error-Prone**: Easy to miss a rename or export the wrong thing
+### Setup
 
-## Solution
+- Have a working mesh and armature fully rigged and ready
+- Define bone collections on the armature for each modular part (e.g. base, outfit A)
 
-**"Clean Room" Export Process:**
+### Save a template
 
-Create a temporary, empty scene where Blender can't create naming conflicts. Then:
-1. Duplicate selected objects to clean scene
-2. Rename perfectly (no `.001` interference)
-3. Delete unwanted bone collections
-4. Export FBX
-5. Clean up automatically
+- Select meshes and the armature in the viewport
+- Provide export names for the selected meshes
+- Toggle which bone collections to include
+- Name the template and click **+** to save
 
-## How It Works
+### Export
 
-1. **Define Rename Map** (one-time setup)
-   - `Armature_WIP` → `Armature`
-   - `Body_HighPoly` → `Body`
-   - `Willa_Head_HighPoly` → `Willa_Head`
+- Select a saved template and click **Stage Export**
+- Export FBX from the staging scene, then click **Return**
 
-2. **Create Export Profiles** (one-time setup)
-   - Profile: "Body + Head"
-   - Keep bone collections: Base Body, Head
-   - Objects to export: Armature, Body, Head
-   - Optional: Force join specific meshes (e.g., Body + Head → Body for VRCFT/MMD)
+## Development
 
-3. **Export** (one-click)
-   - Select profile: "Body + Head"
-   - Click "Export"
-   - Addon:
-     - Creates temp scene
-     - Joins configured meshes (if specified)
-     - Duplicates + renames
-     - Removes unwanted bones
-     - Exports FBX
-     - Deletes temp scene
-   - Done
+### Building
 
-## Workflow Benefits
+```bash
+blender --command extension build
+blender --command extension validate
+```
 
-- **Original file untouched** - No risk of accidentally renaming your main rig
-- **Perfect naming** - Always exports as `Armature`, `Body`, etc.
-- **One-click** - Set up once, then just select profile and export
-- **Repeatable** - Same result every time for outfit1, outfit2, props, etc.
+Run from the addon directory (requires `blender_manifest.toml`).
 
-## Technical Details
+### Testing
 
-- Uses temporary scene + duplicates (avoids naming conflicts)
-- Bone collection filtering by name
-- Optional: Per-profile mesh joining (e.g., for VRCFT/MMD compatibility where head+body must be single "Body" mesh)
-- Auto-renames object + data names
-- Custom export profiles stored in blend file
+Pure data functions can be tested without Blender:
+
+```bash
+cd ModularAvatarExport
+python -m pytest tests/
+python -m unittest discover tests/
+```
+
+## Manual Testing
+
+### Core flow
+
+- Select meshes + armature, name and save a template → appears in dropdown
+- Stage a template → opens `Export: <name>` scene with objects renamed
+- Two meshes with the same export name → joined into one on stage
+- Disable a bone collection, stage → those bones absent from armature
+- Click **Return** → back to original scene, staging scene gone
+- Save `.blend`, reload → template still present and stages correctly
+
+### Error paths
+
+- **+** with two armatures selected → no template
+- **+** with no name → no template
+
+

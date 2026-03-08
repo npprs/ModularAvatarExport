@@ -1,9 +1,9 @@
 """
-Display panels for Modular Avatar Export
+Display UI panels for Modular Avatar Export
 """
 
-import bpy  # type: ignore
 from bpy.types import Panel
+from .data import parse_template_data
 
 
 class NOPPERS_PT_ModularAvatarExport(Panel):
@@ -13,7 +13,7 @@ class NOPPERS_PT_ModularAvatarExport(Panel):
     bl_idname = "NOPPERS_PT_modular_avatar_export"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
-    bl_category = "NOPPERS Tools"
+    bl_category = "NOPPERS Tools"  # Shared addon category
 
     def draw(self, context):
         layout = self.layout
@@ -24,18 +24,32 @@ class NOPPERS_PT_ModularAvatarExport(Panel):
             self._draw_clean_room(layout, scene)
             return
 
+        # Edit mode
         is_new = scene.noppers_ma_export_active_template == "NEW"
 
-        # Template Selector
+        self._draw_template_selector(layout, context, scene, is_new)
+        layout.separator()
+
+        if is_new:
+            # New Template - Can SAVE
+            self._draw_new_template(layout, context)
+        else:
+            # Saved Template - Can EXPORT, UPDATE, or DELETE
+            self._draw_saved_template(layout, scene)
+
+    def _draw_template_selector(self, layout, context, scene, is_new):
+        """Template dropdown with save/remove buttons."""
         row = layout.row(align=True)
         row.prop(scene, "noppers_ma_export_active_template", text="")
+
         if is_new:
+            # New Template - SAVE
             has_selection = any(
                 obj.type in {"MESH", "ARMATURE"} for obj in context.selected_objects
             )
-            save_sub = row.row(align=True)
-            save_sub.enabled = has_selection
-            save_sub.operator("noppers.save_template", text="", icon="ADD")
+            save_sub_row = row.row(align=True)
+            save_sub_row.enabled = has_selection
+            save_sub_row.operator("noppers.save_template", text="", icon="ADD")
             layout.prop(
                 scene,
                 "noppers_ma_export_template_name",
@@ -43,18 +57,12 @@ class NOPPERS_PT_ModularAvatarExport(Panel):
                 placeholder="Template name...",
             )
         else:
+            # Saved Template - UPDATE or DELETE
             row.operator("noppers.save_template", text="", icon="ADD")
             row.operator("noppers.remove_template", text="", icon="REMOVE")
 
-        layout.separator()
-
-        if is_new:
-            self._draw_new_template(layout, context)
-        else:
-            self._draw_saved_template(layout, context, scene)
-
     def _draw_clean_room(self, layout, scene):
-        """Shown when the current Blender scene is in staging."""
+        """Staging mode - Can return to source scene"""
         col = layout.column(align=True)
         col.label(
             text=f"Source:  {scene.noppers_ma_source_scene_name}", icon="SCENE_DATA"
@@ -68,8 +76,57 @@ class NOPPERS_PT_ModularAvatarExport(Panel):
             icon="LOOP_BACK",
         )
 
+    def _draw_mesh_list(self, layout, meshes):
+        """Draw export name fields for a list of mesh objects."""
+        target_counts = {}
+        for obj in meshes:
+            target_name = obj.noppers_ma_export_target_name.strip() or obj.name
+            target_counts[target_name] = target_counts.get(target_name, 0) + 1
+
+        for obj in meshes:
+            box = layout.box()
+            col = box.column(align=True)
+            row = col.row()
+            row.enabled = False
+            row.label(text=obj.name)
+            name_row = col.row(align=True)
+            name_row.prop(
+                obj,
+                "noppers_ma_export_target_name",
+                text="Export As",
+                placeholder=obj.name,
+            )
+            target_name = obj.noppers_ma_export_target_name.strip() or obj.name
+            if target_counts.get(target_name, 0) > 1:
+                name_row.label(text="", icon="LINKED")
+
+    def _draw_armature_bone_collection(self, layout, armatures, empty_label):
+        """Draw export name and bone collections for the first armature, or an empty label."""
+        if not armatures:
+            layout.label(text=empty_label, icon="INFO")
+            return
+        obj = armatures[0]
+        col = layout.column(align=True)
+        row = col.row()
+        row.enabled = False
+        row.label(text=obj.name)
+        col.prop(
+            obj,
+            "noppers_ma_export_target_name",
+            text="Export As",
+            placeholder=obj.name,
+        )
+
+        layout.separator()
+        layout.label(text="Bone Collections:", icon="GROUP_BONE")
+        if obj.noppers_ma_bone_collection_items:
+            for item in obj.noppers_ma_bone_collection_items:
+                layout.prop(item, "enabled", text=item.name)
+        else:
+            layout.label(text="No bone collections found", icon="INFO")
+
     def _draw_new_template(self, layout, context):
-        """Selection-driven UI for building a new template."""
+        """New template - Update UI based on scene selection"""
         selected_meshes = [
             obj for obj in context.selected_objects if obj.type == "MESH"
         ]
@@ -80,146 +137,48 @@ class NOPPERS_PT_ModularAvatarExport(Panel):
         # Meshes
         layout.label(text="Meshes:", icon="MESH_DATA")
         if selected_meshes:
-            target_counts = {}
-            for obj in selected_meshes:
-                t = obj.noppers_ma_export_target_name.strip() or obj.name
-                target_counts[t] = target_counts.get(t, 0) + 1
-
-            for obj in selected_meshes:
-                box = layout.box()
-                col = box.column(align=True)
-                row = col.row()
-                row.enabled = False
-                row.label(text=obj.name)
-                t = obj.noppers_ma_export_target_name.strip() or obj.name
-                name_row = col.row(align=True)
-                name_row.prop(
-                    obj,
-                    "noppers_ma_export_target_name",
-                    text="Export As",
-                    placeholder=obj.name,
-                )
-                if target_counts.get(t, 0) > 1:
-                    name_row.label(text="", icon="LINKED")
+            self._draw_mesh_list(layout, selected_meshes)
         else:
             layout.label(text="Select one or more meshes", icon="INFO")
 
         # Armature
         layout.separator()
         layout.label(text="Armature:", icon="ARMATURE_DATA")
-        if selected_armatures:
-            obj = selected_armatures[0]
-            col = layout.column(align=True)
-            row = col.row()
-            row.enabled = False
-            row.label(text=obj.name)
-            col.prop(
-                obj,
-                "noppers_ma_export_target_name",
-                text="Export As",
-                placeholder=obj.name,
-            )
+        self._draw_armature_bone_collection(
+            layout, selected_armatures, "Select an armature"
+        )
 
-            layout.separator()
-            layout.label(text="Bone Collections:", icon="GROUP_BONE")
-            if obj.noppers_ma_bone_collection_items:
-                for item in obj.noppers_ma_bone_collection_items:
-                    layout.prop(item, "enabled", text=item.name)
-            else:
-                layout.label(text="No bone collections found", icon="INFO")
-        else:
-            layout.label(text="Select an armature", icon="INFO")
-
-    def _draw_saved_template(self, layout, context, scene):
+    def _draw_saved_template(self, layout, scene):
         """Template-data-driven UI — persistent regardless of selection."""
         idx = int(scene.noppers_ma_export_active_template)
         if idx >= len(scene.noppers_ma_export_templates):
             return
         template = scene.noppers_ma_export_templates[idx]
-        mappings = [
-            pair.split(":", 1) for pair in template.data.split(";") if ":" in pair
-        ]
+        mappings, _ = parse_template_data(template.data)
 
         meshes = [
-            (n, t)
-            for n, t in mappings
-            if scene.objects.get(n) is None or scene.objects[n].type == "MESH"
+            scene.objects[n]
+            for n, _ in mappings.items()
+            if scene.objects.get(n) and scene.objects[n].type == "MESH"
         ]
         armatures = [
-            (n, t)
-            for n, t in mappings
+            scene.objects[n]
+            for n, _ in mappings.items()
             if scene.objects.get(n) and scene.objects[n].type == "ARMATURE"
         ]
 
         # Meshes
         layout.label(text="Meshes:", icon="MESH_DATA")
-        target_counts = {}
-        for obj_name, _ in meshes:
-            obj = scene.objects.get(obj_name)
-            if obj:
-                t = obj.noppers_ma_export_target_name.strip() or obj.name
-                target_counts[t] = target_counts.get(t, 0) + 1
-
-        for obj_name, _ in meshes:
-            obj = scene.objects.get(obj_name)
-            box = layout.box()
-            col = box.column(align=True)
-            # Name row with status icon
-            name_row = col.row(align=True)
-            if obj is None:
-                name_row.label(text="", icon="ERROR")
-                name_row.label(text=obj_name + "  (missing)")
-            else:
-                if obj.hide_get() or obj.hide_viewport:
-                    name_row.label(text="", icon="HIDE_ON")
-                name_row.label(text=obj_name)
-            # Export name field (editable if object exists)
-            if obj:
-                t = obj.noppers_ma_export_target_name.strip() or obj.name
-                name_row2 = col.row(align=True)
-                name_row2.prop(
-                    obj,
-                    "noppers_ma_export_target_name",
-                    text="Export As",
-                    placeholder=obj.name,
-                )
-                if target_counts.get(t, 0) > 1:
-                    name_row2.label(text="", icon="LINKED")
+        self._draw_mesh_list(layout, meshes)
 
         # Armature
         layout.separator()
         layout.label(text="Armature:", icon="ARMATURE_DATA")
-        if armatures:
-            obj_name, _ = armatures[0]
-            obj = scene.objects.get(obj_name)
-            if obj is None:
-                row = layout.row()
-                row.label(text="", icon="ERROR")
-                row.label(text=obj_name + "  (missing)")
-            else:
-                col = layout.column(align=True)
-                status_row = col.row()
-                if obj.hide_get() or obj.hide_viewport:
-                    status_row.label(text="", icon="HIDE_ON")
-                status_row.label(text=obj_name)
-                col.prop(
-                    obj,
-                    "noppers_ma_export_target_name",
-                    text="Export As",
-                    placeholder=obj.name,
-                )
+        self._draw_armature_bone_collection(
+            layout, armatures, "No armature in template"
+        )
 
-                layout.separator()
-                layout.label(text="Bone Collections:", icon="GROUP_BONE")
-                if obj.noppers_ma_bone_collection_items:
-                    for item in obj.noppers_ma_bone_collection_items:
-                        layout.prop(item, "enabled", text=item.name)
-                else:
-                    layout.label(text="No bone collections found", icon="INFO")
-        else:
-            layout.label(text="No armature in template", icon="INFO")
-
-        # Staging mode — show return button and nothing else
+        # Stage for export
         layout.separator()
         row = layout.row()
         row.scale_y = 1.4
