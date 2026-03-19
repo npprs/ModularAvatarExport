@@ -84,6 +84,7 @@ def encode_template_data(
     return json.dumps({"meshes": mesh_list, "armature": armature_data})
 
 
+@bpy.app.handlers.persistent
 def sync_bone_collections(scene, _depsgraph):
     """Depsgraph handler — keeps noppers_ma_bone_collection_items in sync with armature collections.
 

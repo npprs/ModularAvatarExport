@@ -1,5 +1,7 @@
 *.zip
 
+# Project artifacts
+/Media
 
 # Test artifacts
 __pycache__/

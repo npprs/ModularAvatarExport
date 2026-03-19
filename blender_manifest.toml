@@ -23,3 +23,10 @@ Modular avatar export:
 - Optionally join mesh with same target name
 - Export staged in temporary scene
 """
+
+[build]
+paths_exclude_pattern = [
+  "Media/",
+  "tests/",
+  "README.md",
+]
