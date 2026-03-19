@@ -26,6 +26,10 @@ Modular avatar export:
 
 [build]
 paths_exclude_pattern = [
+  ".git/",
+  "__pycache__/",
+  "*.pyc",
+  "*.zip",
   "Media/",
   "tests/",
   "README.md",
